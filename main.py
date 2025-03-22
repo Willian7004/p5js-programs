@@ -1,84 +1,111 @@
-import http.server
-import socketserver
-import threading
-import tkinter as tk
-from tkinter import scrolledtext
-import webbrowser
 import os
+import tkinter as tk
+from tkinter import ttk, messagebox
+import subprocess
 import shutil
 
-# 配置服务器参数
-PORT = 8001
-HTML_DIR = 'html'
-PAGES_DIR = 'pages'
+class Application(tk.Tk):
+    def __init__(self):
+        super().__init__()
+        self.title("Control Panel")
+        self.webview_process = None
+        
+        # 初始化UI
+        self.create_widgets()
+        self.protocol("WM_DELETE_WINDOW", self.on_close)
+        
+        # 获取pages目录中的js文件
+        self.pages_dir = "pages"
+        self.js_files = self.get_js_files()
+        
+        # 设置默认选择并初始化
+        self.selected = tk.StringVar(value="main.js")
+        self.initialize_sketch()
+        self.create_radio_buttons()
+        self.update_description()
 
-# 自定义HTTP请求处理器
-class CustomHandler(http.server.SimpleHTTPRequestHandler):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, directory=HTML_DIR, **kwargs)
+    def create_widgets(self):
+        # 创建主容器
+        main_frame = ttk.Frame(self)
+        main_frame.pack(padx=10, pady=10, fill=tk.BOTH, expand=True)
 
-# 启动HTTP服务器
-def start_server():
-    with socketserver.TCPServer(("", PORT), CustomHandler) as httpd:
-        print(f"服务器已启动，地址：http://localhost:{PORT}")
-        httpd.serve_forever()
+        # 单选按钮区域
+        self.radio_frame = ttk.LabelFrame(main_frame, text="Available Pages")
+        self.radio_frame.pack(fill=tk.X, pady=5)
 
-# 创建主窗口
-root = tk.Tk()
-root.title("p5.js 示例控制器")
-root.geometry("500x400")
+        # 描述区域
+        desc_frame = ttk.LabelFrame(main_frame, text="Description")
+        desc_frame.pack(fill=tk.BOTH, expand=True, pady=5)
+        
+        self.desc_text = tk.Text(desc_frame, wrap=tk.WORD, height=10)
+        scrollbar = ttk.Scrollbar(desc_frame, command=self.desc_text.yview)
+        self.desc_text.configure(yscrollcommand=scrollbar.set)
+        
+        self.desc_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
 
-# 服务器地址显示
-server_frame = tk.Frame(root)
-server_frame.pack(pady=10)
-tk.Label(server_frame, text=f"服务器地址：http://localhost:{PORT}", fg="blue").pack()
+    def get_js_files(self):
+        files = [f for f in os.listdir(self.pages_dir) if f.endswith(".js")]
+        if not files:
+            messagebox.showerror("Error", "No JS files found in pages directory!")
+            self.destroy()
+        return files
 
-# 单选按钮容器
-radio_frame = tk.LabelFrame(root, text="示例列表")
-radio_frame.pack(pady=10, fill='x')
+    def create_radio_buttons(self):
+        for js_file in self.js_files:
+            rb = ttk.Radiobutton(
+                self.radio_frame,
+                text=js_file,
+                variable=self.selected,
+                value=js_file,
+                command=self.update_sketch
+            )
+            rb.pack(anchor=tk.W, padx=5, pady=2)
 
-# 文本显示区域
-txt_frame = tk.LabelFrame(root, text="示例说明")
-txt_frame.pack(pady=10, fill='both', expand=True)
-txt_content = scrolledtext.ScrolledText(txt_frame, wrap=tk.WORD, width=50, height=10)
-txt_content.pack(padx=5, pady=5, fill='both', expand=True)
+    def initialize_sketch(self):
+        self.copy_js_file()
+        self.start_webview()
 
-# 初始化单选按钮和文件列表
-selected_js = tk.StringVar(value='main')
-js_files = [f[:-3] for f in os.listdir(PAGES_DIR) if f.endswith('.js')]
+    def copy_js_file(self):
+        src = os.path.join(self.pages_dir, self.selected.get())
+        dst = os.path.join("html", "sketch.js")
+        try:
+            shutil.copy(src, dst)
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to copy JS file: {str(e)}")
 
-# 创建单选按钮
-for js in js_files:
-    rb = tk.Radiobutton(radio_frame, 
-                       text=js, 
-                       variable=selected_js, 
-                       value=js,
-                       command=lambda: update_sketch())
-    rb.pack(anchor='w', padx=5)
+    def update_description(self):
+        txt_file = self.selected.get().replace(".js", ".txt")
+        path = os.path.join(self.pages_dir, txt_file)
+        try:
+            with open(path, "r",encoding="utf-8") as f:
+                content = f.read()
+        except Exception as e:
+            content = f"Description unavailable: {str(e)}"
+        
+        self.desc_text.delete(1.0, tk.END)
+        self.desc_text.insert(tk.END, content)
 
-# 更新sketch.js和说明文本
-def update_sketch():
-    selected = selected_js.get()
-    # 更新JS文件
-    src_js = os.path.join(PAGES_DIR, f"{selected}.js")
-    dst_js = os.path.join(HTML_DIR, "sketch.js")
-    shutil.copyfile(src_js, dst_js)
-    # 更新说明文本
-    txt_file = os.path.join(PAGES_DIR, f"{selected}.txt")
-    with open(txt_file, 'r', encoding='utf-8') as f:
-        txt_content.delete(1.0, tk.END)
-        txt_content.insert(tk.INSERT, f.read())
+    def update_sketch(self):
+        self.copy_js_file()
+        self.update_description()
+        self.restart_webview()
 
-# 初始化默认选择
-update_sketch()
+    def start_webview(self):
+        self.webview_process = subprocess.Popen(["python", "webviewer.py"])
 
-# 启动服务器线程
-server_thread = threading.Thread(target=start_server)
-server_thread.daemon = True
-server_thread.start()
+    def restart_webview(self):
+        if self.webview_process:
+            self.webview_process.terminate()
+            self.webview_process.wait()
+        self.start_webview()
 
-# 自动打开浏览器
-webbrowser.open(f"http://localhost:{PORT}")
+    def on_close(self):
+        if self.webview_process:
+            self.webview_process.terminate()
+            self.webview_process.wait()
+        self.destroy()
 
-# 运行主循环
-root.mainloop()
+if __name__ == "__main__":
+    app = Application()
+    app.mainloop()

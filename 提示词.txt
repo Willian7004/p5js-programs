@@ -1,0 +1,867 @@
+### user：
+
+写一个python程序，实现以下功能：
+
+1.当前文件夹中包含html文件夹和pages文件夹
+
+2.在webview.py使用pywebview读取html/index.html，分辨率随窗口分辨率调整
+
+3.在main.py创建tkinter页面根据pages文件夹中的文件的文件名创建单选按钮，用于把html/sketch.js文件的内容替换为pages文件夹中对应的js文件的内容（默认选中main.js）并在在tkinter页面上显示与选中的js文件同名的txt文件的内容
+
+4.启动main.py时自动启动webview.py，并在每次替换js文件时重新启动webview.py
+
+### 思维链：
+
+嗯，我需要帮用户写一个Python程序，满足他们提出的四个功能。让我仔细看看每个要求，然后一步步思考如何实现。
+
+首先，用户的需求分四个部分：
+
+1. 当前文件夹中包含html和pages两个文件夹。
+
+2. 在webview.py中使用pywebview读取html/index.html，并且窗口分辨率随窗口调整。
+
+3. 在main.py中创建tkinter页面，根据pages文件夹中的文件生成单选按钮。选中某个按钮时，替换html/sketch.js的内容为对应pages中的js文件，默认选中的是main.js。同时，在tkinter页面上显示同名的txt文件内容。
+
+4. 启动main.py时自动启动webview.py，每次替换js文件后重新启动webview.py。
+
+好的，首先考虑目录结构。用户需要当前目录下有html和pages两个文件夹。html里应该有index.html和sketch.js，而pages里存放各个js文件，比如main.js和其他文件，同时每个js文件对应同名的txt文件，例如main.js对应main.txt。
+
+接下来，webview.py需要用pywebview打开index.html，并且窗口大小自适应。可能需要设置窗口的尺寸为全屏或者根据屏幕调整，或者让窗口可以调整大小。可能需要设置width和height为适当的值，或者使用百分比。
+
+然后是main.py的tkinter部分。需要遍历pages文件夹中的所有js文件，生成单选按钮。默认选中main.js。当选择不同的单选按钮时，需要将对应的js文件内容复制到html/sketch.js中，并且显示对应的txt文件内容。这里可能需要用到文件操作，比如shutil.copy或者直接读写文件。
+
+另外，每次替换js文件后，需要重新启动webview.py。这意味着当用户选择一个选项时，main.py需要终止当前的webview进程，然后重新启动它。这里可能需要用到子进程管理，比如使用subprocess模块启动webview.py，并保存其进程对象，以便在需要时终止它。
+
+现在考虑如何整合这两个脚本。因为用户希望启动main.py时自动启动webview.py，所以在main.py中应该启动webview.py作为一个子进程。然后，当单选按钮被点击时，先终止之前的webview进程，复制对应的js文件到目标位置，再重新启动webview进程。
+
+需要注意的是，webview.py应该是一个独立的脚本，可以被多次启动和终止。同时，在替换sketch.js时，要确保文件正确覆盖，可能需要在复制前检查是否存在，或者处理异常。
+
+另外，tkinter的界面布局可能需要一个Frame来放置单选按钮，另一个区域（比如Text或Label）来显示txt文件的内容。当单选按钮被选中时，触发事件处理函数，这个函数负责复制js文件，读取对应的txt文件内容，并更新显示区域，同时重启webview。
+
+现在，我需要考虑各个模块的具体实现步骤。
+
+首先，目录结构：
+
+- 项目根目录/
+
+- html/
+
+- index.html
+
+- sketch.js（会被替换）
+
+- pages/
+
+- main.js
+
+- other.js
+
+- main.txt
+
+- other.txt
+
+- webview.py
+
+- main.py
+
+index.html需要引用sketch.js，这样当sketch.js被替换后，重新加载页面就能看到变化。但pywebview的窗口可能不会自动刷新，所以可能需要每次替换后重新加载整个页面，或者通过重启webview来强制刷新。
+
+不过，根据用户的要求，每次替换js文件后要重新启动webview.py。这可能是因为直接刷新页面比较困难，或者用户希望确保环境干净。所以，每次更换js文件后，终止当前的webview进程，并启动新的。
+
+接下来，webview.py的代码。它需要使用pywebview创建窗口，加载html/index.html。分辨率随窗口调整可能意味着窗口初始大小是全屏或者用户调整时可以自适应。这里可能需要设置窗口的初始大小为屏幕的一部分，或者全屏，并允许用户调整大小。例如：
+
+import webview
+
+def main():
+
+window = webview.create_window('App', 'html/index.html', width=800, height=600)
+
+webview.start()
+
+if __name__ == '__main__':
+
+main()
+
+不过，这里的width和height可能需要根据屏幕分辨率调整。例如，可以获取屏幕的尺寸，然后设置为一定比例。或者让窗口默认最大化，或者允许用户调整，这可能需要不同的参数。比如设置窗口为可调整大小：
+
+window = webview.create_window('App', 'html/index.html', resizable=True)
+
+这可能已经足够，因为用户调整窗口时，内容应该会自动适应。但具体可能需要看pywebview的文档，确认如何设置窗口大小和调整行为。
+
+然后是main.py的tkinter部分。需要做以下几件事：
+
+1. 扫描pages文件夹中的js文件，生成单选按钮。
+
+2. 默认选中main.js。
+
+3. 每个单选按钮被选中时，执行替换sketch.js、显示对应txt内容、重启webview.py。
+
+首先，获取pages文件夹中的所有.js文件：
+
+import os
+
+import tkinter as tk
+
+from tkinter import ttk
+
+import subprocess
+
+import shutil
+
+pages_dir = 'pages'
+
+js_files = [f for f in os.listdir(pages_dir) if f.endswith('.js')]
+
+然后，创建tkinter窗口，添加单选按钮。使用tk.StringVar来跟踪选中的文件。
+
+class App(tk.Tk):
+
+def __init__(self):
+
+super().__init__()
+
+self.title("Control Panel")
+
+self.webview_process = None
+
+# 创建单选按钮
+
+self.selected_file = tk.StringVar(value='main.js')  # 默认选中main.js
+
+self.create_radio_buttons()
+
+# 创建文本显示区域
+
+self.text_display = tk.Text(self, wrap=tk.WORD)
+
+self.text_display.pack(padx=10, pady=10)
+
+# 启动初始的webview进程
+
+self.replace_js_and_restart_webview()
+
+def create_radio_buttons(self):
+
+frame = ttk.Frame(self)
+
+frame.pack(padx=10, pady=10)
+
+for js_file in js_files:
+
+rb = ttk.Radiobutton(
+
+frame,
+
+text=js_file,
+
+variable=self.selected_file,
+
+value=js_file,
+
+command=self.on_radio_select
+
+)
+
+rb.pack(anchor=tk.W)
+
+def on_radio_select(self):
+
+# 当单选按钮被选择时触发
+
+selected = self.selected_file.get()
+
+# 替换sketch.js
+
+src = os.path.join('pages', selected)
+
+dest = os.path.join('html', 'sketch.js')
+
+shutil.copy(src, dest)
+
+# 显示对应的txt文件内容
+
+txt_file = selected.replace('.js', '.txt')
+
+txt_path = os.path.join('pages', txt_file)
+
+with open(txt_path, 'r') as f:
+
+content = f.read()
+
+self.text_display.delete(1.0, tk.END)
+
+self.text_display.insert(tk.END, content)
+
+# 重启webview
+
+self.restart_webview()
+
+def restart_webview(self):
+
+# 终止之前的进程
+
+if self.webview_process:
+
+self.webview_process.terminate()
+
+self.webview_process.wait()
+
+# 启动新的webview进程
+
+self.webview_process = subprocess.Popen(['python', 'webview.py'])
+
+def replace_js_and_restart_webview(self):
+
+# 初始启动时也需要复制默认选中的文件
+
+selected = self.selected_file.get()
+
+src = os.path.join('pages', selected)
+
+dest = os.path.join('html', 'sketch.js')
+
+shutil.copy(src, dest)
+
+# 显示对应的txt内容
+
+txt_file = selected.replace('.js', '.txt')
+
+txt_path = os.path.join('pages', txt_file)
+
+with open(txt_path, 'r') as f:
+
+content = f.read()
+
+self.text_display.delete(1.0, tk.END)
+
+self.text_display.insert(tk.END, content)
+
+# 启动webview
+
+self.restart_webview()
+
+if __name__ == '__main__':
+
+app = App()
+
+app.mainloop()
+
+这里有几个需要注意的地方：
+
+1. webview_process变量保存当前的子进程，当需要重启时，先terminate，然后启动新的。
+
+2. 当用户选择不同的单选按钮时，触发on_radio_select方法，复制对应的js文件，显示txt内容，并重启webview。
+
+3. 初始启动时，replace_js_and_restart_webview会被调用，复制默认的main.js，并启动webview。
+
+4. 需要处理文件路径的问题，比如pages文件夹中的js和txt文件必须对应，例如main.js对应main.txt。
+
+但可能存在一些问题：
+
+- 在Windows系统中，终止进程可能需要不同的处理，因为subprocess的terminate可能不够彻底。或者可能需要使用其他方法，比如发送信号，或者检查进程是否已经终止。
+
+- 如果用户选择的js文件没有对应的txt文件，会导致错误。需要处理这种情况，比如捕获异常，或者在代码中确保每个js文件都有对应的txt文件。
+
+- webview.py可能启动后阻塞，所以作为子进程运行是正确的，使用Popen在后台运行。
+
+- 在替换sketch.js时，如果目标文件正在被webview进程使用（比如在Windows中），可能导致复制失败。因为当webview进程被终止后，文件应该可以被覆盖。需要确保在复制之前，旧的webview进程已经被终止，这样文件句柄被释放。
+
+现在，关于webview.py的实现，可能需要确保每次启动时都重新加载页面。例如，当重新启动webview.py时，它会重新读取html/index.html，而index.html会引用最新的sketch.js。这应该是可行的，因为每次替换sketch.js之后，webview进程重新启动，加载新的文件。
+
+另外，用户希望webview窗口的分辨率随窗口调整。在pywebview中，是否可以通过设置窗口属性来实现？比如设置窗口resizable=True，或者在创建窗口时设置合适的参数。例如：
+
+在webview.py中：
+
+import webview
+
+def main():
+
+window = webview.create_window(
+
+'App',
+
+'html/index.html',
+
+width=800,
+
+height=600,
+
+resizable=True,
+
+confirm_close=True
+
+)
+
+webview.start()
+
+当用户调整窗口大小时，内容应该会自动适应，这取决于HTML/CSS如何布局。例如，如果HTML中的canvas元素设置为100%宽度和高度，那么调整窗口时，内容会随之调整。
+
+可能需要在index.html中确保内容能够自适应窗口大小。例如，在HTML中添加：
+
+<style>
+
+body, html {
+
+margin: 0;
+
+padding: 0;
+
+width: 100%;
+
+height: 100%;
+
+}
+
+canvas {
+
+display: block;
+
+width: 100%;
+
+height: 100%;
+
+}
+
+</style>
+
+这样，canvas元素会填满整个窗口，当窗口大小变化时，canvas的尺寸也会变化。不过，具体的JS代码（比如使用p5.js）可能需要处理窗口resize事件来调整画布大小。例如：
+
+function windowResized() {
+
+resizeCanvas(windowWidth, windowHeight);
+
+}
+
+这可能属于用户自己的sketch.js的内容，不在我们的处理范围内，但需要确保用户的JS代码能够处理窗口调整。
+
+现在，回到main.py中的问题。假设pages文件夹中的每个js文件都有对应的txt文件，例如main.js对应main.txt，那么当用户选择main.js时，会显示main.txt的内容。
+
+在tkinter的文本显示区域，可能需要使用Text组件，并设置适当的滚动条。上面的示例中使用了Text组件，但没有滚动条，可能需要添加。例如：
+
+text_frame = ttk.Frame(self)
+
+text_frame.pack(padx=10, pady=10, fill=tk.BOTH, expand=True)
+
+self.text_display = tk.Text(text_frame, wrap=tk.WORD)
+
+scrollbar = ttk.Scrollbar(text_frame, orient=tk.VERTICAL, command=self.text_display.yview)
+
+self.text_display.configure(yscrollcommand=scrollbar.set)
+
+self.text_display.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+
+这样，文本区域可以滚动，并且填充整个空间。
+
+另一个问题是，当用户关闭tkinter窗口时，应该终止webview进程。这可以通过在App类中添加__del__方法或覆盖destroy方法来实现：
+
+def destroy(self):
+
+# 终止webview进程
+
+if self.webview_process:
+
+self.webview_process.terminate()
+
+self.webview_process.wait()
+
+super().destroy()
+
+但可能需要更可靠的方式，比如在窗口关闭时触发这个操作。可以绑定窗口的关闭事件：
+
+class App(tk.Tk):
+
+def __init__(self):
+
+# ... 其他代码 ...
+
+self.protocol("WM_DELETE_WINDOW", self.on_close)
+
+def on_close(self):
+
+if self.webview_process:
+
+self.webview_process.terminate()
+
+self.webview_process.wait()
+
+self.destroy()
+
+这样，当用户关闭窗口时，webview进程会被终止。
+
+现在，测试整个流程：
+
+1. 用户运行main.py。
+
+2. Tkinter窗口出现，显示单选按钮（根据pages中的js文件）。
+
+3. 默认选中main.js，复制到html/sketch.js，并显示main.txt的内容。
+
+4. webview窗口启动，加载index.html，其中使用main.js。
+
+5. 当用户选择其他单选按钮时，如other.js，复制到sketch.js，显示other.txt，重启webview，此时新的webview窗口加载更新后的sketch.js。
+
+6. 关闭tkinter窗口时，终止webview进程。
+
+可能的问题：
+
+- 如果用户频繁切换选项，可能导致多个webview进程残留。需要确保每次切换时，之前的进程被正确终止。
+
+- 文件复制时出错，比如目标文件被占用。但在重启webview之前已经终止了进程，应该没问题。
+
+- 路径问题，比如在webview.py中使用的相对路径是否正确。需要确保当webview.py作为子进程启动时，工作目录正确。
+
+假设所有文件都位于项目根目录，且运行时当前目录正确，那么相对路径应该有效。
+
+现在，编写各个文件的内容：
+
+webview.py的内容：
+
+import webview
+
+def main():
+
+window = webview.create_window(
+
+'App',
+
+'html/index.html',
+
+width=1024,
+
+height=768,
+
+resizable=True
+
+)
+
+webview.start()
+
+if __name__ == '__main__':
+
+main()
+
+main.py的内容：
+
+import os
+
+import tkinter as tk
+
+from tkinter import ttk
+
+import subprocess
+
+import shutil
+
+class App(tk.Tk):
+
+def __init__(self):
+
+super().__init__()
+
+self.title("Control Panel")
+
+self.webview_process = None
+
+# 获取pages中的js文件列表
+
+self.pages_dir = 'pages'
+
+self.js_files = [f for f in os.listdir(self.pages_dir) if f.endswith('.js')]
+
+if not self.js_files:
+
+raise FileNotFoundError("No js files found in pages directory")
+
+# 设置默认选中的文件为main.js，如果存在的话
+
+default_file = 'main.js'
+
+if default_file not in self.js_files:
+
+default_file = self.js_files[0]
+
+self.selected_file = tk.StringVar(value=default_file)
+
+# 创建界面组件
+
+self.create_widgets()
+
+# 初始替换和启动webview
+
+self.replace_js_and_restart_webview()
+
+# 绑定关闭事件
+
+self.protocol("WM_DELETE_WINDOW", self.on_close)
+
+def create_widgets(self):
+
+# 单选按钮区域
+
+radio_frame = ttk.LabelFrame(self, text="Select Page")
+
+radio_frame.pack(padx=10, pady=5, fill=tk.X)
+
+for js_file in self.js_files:
+
+rb = ttk.Radiobutton(
+
+radio_frame,
+
+text=js_file,
+
+variable=self.selected_file,
+
+value=js_file,
+
+command=self.on_radio_select
+
+)
+
+rb.pack(anchor=tk.W, padx=5, pady=2)
+
+# 文本显示区域
+
+text_frame = ttk.LabelFrame(self, text="Description")
+
+text_frame.pack(padx=10, pady=5, fill=tk.BOTH, expand=True)
+
+self.text_display = tk.Text(text_frame, wrap=tk.WORD, height=10)
+
+scrollbar = ttk.Scrollbar(text_frame, orient=tk.VERTICAL, command=self.text_display.yview)
+
+self.text_display.configure(yscrollcommand=scrollbar.set)
+
+self.text_display.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+
+def on_radio_select(self):
+
+selected = self.selected_file.get()
+
+self.replace_js_and_restart_webview()
+
+def replace_js_and_restart_webview(self):
+
+selected = self.selected_file.get()
+
+# 复制js文件
+
+src_js = os.path.join(self.pages_dir, selected)
+
+dest_js = os.path.join('html', 'sketch.js')
+
+try:
+
+shutil.copy(src_js, dest_js)
+
+except Exception as e:
+
+tk.messagebox.showerror("Error", f"Failed to copy JS file: {e}")
+
+return
+
+# 显示对应的txt文件内容
+
+txt_file = os.path.splitext(selected)[0] + '.txt'
+
+txt_path = os.path.join(self.pages_dir, txt_file)
+
+try:
+
+with open(txt_path, 'r') as f:
+
+content = f.read()
+
+except Exception as e:
+
+content = f"Error loading description: {e}"
+
+self.text_display.delete(1.0, tk.END)
+
+self.text_display.insert(tk.END, content)
+
+# 重启webview
+
+self.restart_webview()
+
+def restart_webview(self):
+
+# 终止之前的进程
+
+if self.webview_process:
+
+self.webview_process.terminate()
+
+try:
+
+self.webview_process.wait(timeout=5)
+
+except subprocess.TimeoutExpired:
+
+tk.messagebox.showerror("Error", "Failed to terminate webview process")
+
+# 启动新的进程
+
+self.webview_process = subprocess.Popen(['python', 'webview.py'])
+
+def on_close(self):
+
+if self.webview_process:
+
+self.webview_process.terminate()
+
+self.webview_process.wait()
+
+self.destroy()
+
+if __name__ == '__main__':
+
+app = App()
+
+app.mainloop()
+
+这个main.py的代码做了以下改进：
+
+- 使用LabelFrame来分组单选按钮和文本显示区域，界面更清晰。
+
+- 处理了可能的异常，比如复制文件失败或读取txt文件失败时弹出错误提示。
+
+- 更健壮地处理默认文件的选择，如果main.js不存在，则选择第一个找到的js文件。
+
+- 添加了滚动条到文本显示区域。
+
+- 在关闭时确保终止webview进程。
+
+用户需要确保在pages文件夹中的每个js文件都有对应的txt文件。例如，如果有example.js，则应有example.txt。
+
+最后，html/index.html的内容可能类似于：
+
+<!DOCTYPE html>
+
+<html>
+
+<head>
+
+<title>Sketch</title>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.0/p5.js"></script>
+
+<script src="sketch.js"></script>
+
+<style>
+
+body { margin: 0; padding: 0; overflow: hidden; }
+
+canvas { display: block; }
+
+</style>
+
+</head>
+
+<body>
+
+</body>
+
+</html>
+
+这样，每次替换sketch.js后，重新启动webview.py会加载新的JS代码。
+
+总结，用户需要按照上述结构组织文件和代码，并安装必要的库（pywebview、tkinter）。需要注意，tkinter通常随Python安装，但可能需要额外安装pywebview：
+
+pip install pywebview
+
+另外，在运行main.py时，需要确保当前工作目录正确，否则相对路径可能出错。如果遇到路径问题，可以使用绝对路径，或者通过os.path调整路径。
+
+### assiatant:
+
+以下是实现所需功能的Python代码：
+
+1. 目录结构：
+```bash
+your_project/
+├── html/
+│   ├── index.html
+│   └── sketch.js  # 这个文件会被自动替换
+├── pages/
+│   ├── main.js
+│   ├── main.txt
+│   ├── example.js
+│   └── example.txt
+├── webview.py
+└── main.py
+```
+
+2. webview.py 内容：
+```python
+import webview
+
+def main():
+    window = webview.create_window(
+        'JS Viewer',
+        'html/index.html',
+        width=1024,
+        height=768,
+        resizable=True
+    )
+    webview.start()
+
+if __name__ == '__main__':
+    main()
+```
+
+3. main.py 内容：
+```python
+import os
+import tkinter as tk
+from tkinter import ttk, messagebox
+import subprocess
+import shutil
+
+class Application(tk.Tk):
+    def __init__(self):
+        super().__init__()
+        self.title("Control Panel")
+        self.webview_process = None
+        
+        # 初始化UI
+        self.create_widgets()
+        self.protocol("WM_DELETE_WINDOW", self.on_close)
+        
+        # 获取pages目录中的js文件
+        self.pages_dir = "pages"
+        self.js_files = self.get_js_files()
+        
+        # 设置默认选择并初始化
+        self.selected = tk.StringVar(value="main.js")
+        self.initialize_sketch()
+        self.create_radio_buttons()
+        self.update_description()
+
+    def create_widgets(self):
+        # 创建主容器
+        main_frame = ttk.Frame(self)
+        main_frame.pack(padx=10, pady=10, fill=tk.BOTH, expand=True)
+
+        # 单选按钮区域
+        self.radio_frame = ttk.LabelFrame(main_frame, text="Available Pages")
+        self.radio_frame.pack(fill=tk.X, pady=5)
+
+        # 描述区域
+        desc_frame = ttk.LabelFrame(main_frame, text="Description")
+        desc_frame.pack(fill=tk.BOTH, expand=True, pady=5)
+        
+        self.desc_text = tk.Text(desc_frame, wrap=tk.WORD, height=10)
+        scrollbar = ttk.Scrollbar(desc_frame, command=self.desc_text.yview)
+        self.desc_text.configure(yscrollcommand=scrollbar.set)
+        
+        self.desc_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+
+    def get_js_files(self):
+        files = [f for f in os.listdir(self.pages_dir) if f.endswith(".js")]
+        if not files:
+            messagebox.showerror("Error", "No JS files found in pages directory!")
+            self.destroy()
+        return files
+
+    def create_radio_buttons(self):
+        for js_file in self.js_files:
+            rb = ttk.Radiobutton(
+                self.radio_frame,
+                text=js_file,
+                variable=self.selected,
+                value=js_file,
+                command=self.update_sketch
+            )
+            rb.pack(anchor=tk.W, padx=5, pady=2)
+
+    def initialize_sketch(self):
+        self.copy_js_file()
+        self.start_webview()
+
+    def copy_js_file(self):
+        src = os.path.join(self.pages_dir, self.selected.get())
+        dst = os.path.join("html", "sketch.js")
+        try:
+            shutil.copy(src, dst)
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to copy JS file: {str(e)}")
+
+    def update_description(self):
+        txt_file = self.selected.get().replace(".js", ".txt")
+        path = os.path.join(self.pages_dir, txt_file)
+        try:
+            with open(path, "r") as f:
+                content = f.read()
+        except Exception as e:
+            content = f"Description unavailable: {str(e)}"
+        
+        self.desc_text.delete(1.0, tk.END)
+        self.desc_text.insert(tk.END, content)
+
+    def update_sketch(self):
+        self.copy_js_file()
+        self.update_description()
+        self.restart_webview()
+
+    def start_webview(self):
+        self.webview_process = subprocess.Popen(["python", "webview.py"])
+
+    def restart_webview(self):
+        if self.webview_process:
+            self.webview_process.terminate()
+            self.webview_process.wait()
+        self.start_webview()
+
+    def on_close(self):
+        if self.webview_process:
+            self.webview_process.terminate()
+            self.webview_process.wait()
+        self.destroy()
+
+if __name__ == "__main__":
+    app = Application()
+    app.mainloop()
+```
+
+4. html/index.html 示例内容：
+```html
+<!DOCTYPE html>
+<html>
+<head>
+    <title>JS Viewer</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.0/p5.js"></script>
+    <script src="sketch.js"></script>
+    <style>
+        body { margin: 0; overflow: hidden; }
+        canvas { display: block; }
+    </style>
+</head>
+<body>
+</body>
+</html>
+```
+
+使用说明：
+1. 确保已安装所需依赖：`pip install pywebview`
+2. 按照目录结构创建文件和文件夹
+3. 在pages目录中添加对应的js和txt文件（例如main.js/main.txt，example.js/example.txt）
+4. 运行main.py启动程序
+
+功能特点：
+- 自动检测pages目录下的所有js文件并生成单选按钮
+- 实时显示对应txt文件的描述内容
+- 每次选择都会自动更新sketch.js并重启预览窗口
+- 自适应窗口大小和滚动文本显示
+- 自动清理进程资源
+
+注意事项：
+- 确保每个js文件都有对应的同名txt文件
+- 首次运行前html/sketch.js文件需要存在（可以创建一个空的）
+- 推荐使用Python 3.6及以上版本
+- 不同操作系统可能需要调整进程终止方式
+
